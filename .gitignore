@@ -1,4 +1,3 @@
-
-chatbot/app/token.env
-chatbot/app/venv/
-chatbot/app/__pycache__/
+**/token.env
+**/venv/
+**/__pycache__/
