@@ -1,3 +1,14 @@
+<<<<<<< HEAD
 **/token.env
 **/venv/
 **/__pycache__/
+node_modules/
+.env
+.env.local
+.env*.local
+dist/
+build/
+.next/
+.DS_Store
+*.log
+>>>>>>> d63d6db (Reorganize project into back-end and front-end folders)
