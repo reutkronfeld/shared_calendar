@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useTransition } from 'react';
+import { useEffect, useRef, useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
@@ -66,6 +66,7 @@ function toISODate(d: Date): string {
 export function FindSlots({ groupId }: Props) {
   const [result, setResult] = useState<FindSlotsResponse | null>(null);
   const [isPending, startTransition] = useTransition();
+  const autoRanRef = useRef(false);
 
   const {
     handleSubmit,
@@ -86,7 +87,7 @@ export function FindSlots({ groupId }: Props) {
   const endDate = watch('endDate');
   const duration = watch('durationMinutes');
 
-  function onSubmit(values: FindSlotsFormOutput) {
+  function runSearch(values: FindSlotsFormOutput, opts: { silent?: boolean } = {}) {
     setResult(null);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jerusalem';
     const rangeStart = new Date(`${values.startDate}T00:00:00`);
@@ -101,14 +102,29 @@ export function FindSlots({ groupId }: Props) {
           timezone,
         });
         setResult(res);
-        if (res.slots.length === 0) {
+        if (res.slots.length === 0 && !opts.silent) {
           toast.info('לא נמצאו זמנים פנויים בטווח שנבחר.');
         }
       } catch {
-        toast.error('חיפוש הזמנים נכשל. נסו שוב.');
+        if (!opts.silent) toast.error('חיפוש הזמנים נכשל. נסו שוב.');
       }
     });
   }
+
+  function onSubmit(values: FindSlotsFormOutput) {
+    runSearch(values);
+  }
+
+  // Auto-run once on mount with defaults (next 7 days, 30 min) — no manual click needed.
+  useEffect(() => {
+    if (autoRanRef.current) return;
+    autoRanRef.current = true;
+    runSearch(
+      { startDate: todayISO(), endDate: inDaysISO(7), durationMinutes: 30 },
+      { silent: true },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupId]);
 
   return (
     <Card>

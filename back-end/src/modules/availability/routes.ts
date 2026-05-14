@@ -97,23 +97,34 @@ export default async function availabilityRoutes(app: FastifyInstance): Promise<
   });
 
   app.put('/me/weekly-availability', { preHandler: [app.requireAuth] }, async (req, reply) => {
+    const log = req.log.child({ route: 'weekly_availability_put', userId: req.userId });
+    log.info({ body: req.body }, 'weekly_request_received');
+
     const parsed = WeeklyBody.safeParse(req.body);
     if (!parsed.success) {
+      log.warn({ issues: parsed.error.issues }, 'weekly_invalid_body');
       return reply.code(400).send({ error: 'invalid_body', issues: parsed.error.issues });
     }
     for (const d of parsed.data.daysAvailability) {
       for (const r of d.timeRanges) {
         if (r.endMinute <= r.startMinute) {
+          log.warn({ day: d.day, range: r }, 'weekly_invalid_range');
           return reply.code(400).send({ error: 'invalid_range', day: d.day });
         }
       }
     }
-    const userId = new Types.ObjectId(req.userId!);
-    const updated = await WeeklyAvailabilityModel.findOneAndUpdate(
-      { userId },
-      { $set: { daysAvailability: parsed.data.daysAvailability } },
-      { new: true, upsert: true },
-    ).lean();
-    return { daysAvailability: updated!.daysAvailability };
+    try {
+      const userId = new Types.ObjectId(req.userId!);
+      const updated = await WeeklyAvailabilityModel.findOneAndUpdate(
+        { userId },
+        { $set: { daysAvailability: parsed.data.daysAvailability } },
+        { new: true, upsert: true },
+      ).lean();
+      log.info('weekly_saved');
+      return { daysAvailability: updated!.daysAvailability };
+    } catch (err) {
+      log.error({ err }, 'weekly_save_failed');
+      return reply.code(500).send({ error: 'save_failed' });
+    }
   });
 }

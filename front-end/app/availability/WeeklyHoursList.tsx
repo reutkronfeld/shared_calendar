@@ -74,9 +74,11 @@ function daysEqual(a: WeeklyDayAvailability[], b: WeeklyDayAvailability[]): bool
 
 interface Props {
   initial: WeeklyDayAvailability[];
+  onSaved?: (saved: WeeklyDayAvailability[]) => void;
+  saveLabel?: string;
 }
 
-export function WeeklyHoursList({ initial }: Props) {
+export function WeeklyHoursList({ initial, onSaved, saveLabel }: Props) {
   const initialNormalized = useMemo(() => ensureSevenDays(initial), [initial]);
   const [server, setServer] = useState<WeeklyDayAvailability[]>(initialNormalized);
   const [local, setLocal] = useState<WeeklyDayAvailability[]>(initialNormalized);
@@ -175,8 +177,21 @@ export function WeeklyHoursList({ initial }: Props) {
       setServer(normalized);
       setLocal(normalized);
       toast.success('השעות נשמרו');
-    } catch {
-      toast.error('שגיאה בשמירה');
+      onSaved?.(normalized);
+    } catch (err) {
+      const apiErr = err as { status?: number; body?: { error?: string; day?: number; issues?: unknown } };
+      console.error('updateWeeklyAvailability failed', apiErr, 'payload:', local);
+      const code = apiErr?.body?.error;
+      const day = apiErr?.body?.day;
+      const message =
+        apiErr?.status === 401
+          ? 'נדרשת התחברות מחדש'
+          : code === 'invalid_range'
+            ? `טווח שעות לא תקין${day !== undefined ? ` (יום ${day})` : ''}`
+            : code === 'invalid_body'
+              ? 'נתונים לא תקינים — בדוק את השעות'
+              : `שגיאה בשמירה${code ? ` (${code})` : apiErr?.status ? ` (${apiErr.status})` : ''}`;
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }
@@ -189,7 +204,7 @@ export function WeeklyHoursList({ initial }: Props) {
       {isDirty && (
         <div className="flex items-center gap-2">
           <Button size="sm" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? 'שומר…' : 'שמירה'}
+            {isSaving ? 'שומר…' : (saveLabel ?? 'שמירה')}
           </Button>
           <Button size="sm" variant="outline" onClick={handleReset} disabled={isSaving}>
             ביטול

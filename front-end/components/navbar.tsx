@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { Calendar } from 'lucide-react';
+import { Calendar, CalendarClock, Users } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { UserMenu } from '@/components/user-menu';
+import { Button } from '@/components/ui/button';
 import { getMe } from '@/lib/session';
 
 export async function Navbar() {
@@ -14,7 +15,23 @@ export async function Navbar() {
           <Calendar className="size-5" />
           <span>יומן משותף</span>
         </Link>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
+          {me && (
+            <>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/groups">
+                  <Users className="size-4" />
+                  <span className="hidden sm:inline">הקבוצות שלי</span>
+                </Link>
+              </Button>
+              <Button asChild variant="ghost" size="sm">
+                <Link href="/availability">
+                  <CalendarClock className="size-4" />
+                  <span className="hidden sm:inline">הזמינות שלי</span>
+                </Link>
+              </Button>
+            </>
+          )}
           <ThemeToggle />
           {me ? <UserMenu name={me.user.name} email={me.user.email} picture={me.user.picture} /> : null}
         </div>

@@ -14,6 +14,7 @@ import { CreateGroupButton } from './CreateGroupButton';
 export default async function GroupsPage() {
   const me = await getMe();
   if (!me) redirect('/signin');
+  if (!me.user.onboarded) redirect('/onboarding');
 
   const first = me.user.name.split(' ')[0];
 

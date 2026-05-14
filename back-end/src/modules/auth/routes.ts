@@ -5,6 +5,7 @@ import { encrypt } from '../../lib/crypto.js';
 import { UserModel, type User } from '../users/user.model.js';
 import { MembershipModel } from '../groups/membership.model.js';
 import type { Group } from '../groups/group.model.js';
+import { WeeklyAvailabilityModel } from '../availability/weekly.model.js';
 
 /**
  * Auth routes:
@@ -79,6 +80,11 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
       .populate<{ groupId: Group }>('groupId')
       .lean();
 
+    const weeklyDoc = await WeeklyAvailabilityModel.findOne({ userId }).lean();
+    const hasWeekly = !!weeklyDoc &&
+      Array.isArray(weeklyDoc.daysAvailability) &&
+      weeklyDoc.daysAvailability.some((d) => d.enabled && d.timeRanges.length > 0);
+
     return {
       user: {
         id: user._id.toString(),
@@ -86,6 +92,9 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         name: user.name,
         picture: user.picture ?? null,
         defaultTimeZone: user.defaultTimeZone,
+        hasGoogleSync: !!user.refreshToken,
+        hasWeeklyAvailability: hasWeekly,
+        onboarded: hasWeekly,
       },
       memberships: memberships.map((m) => ({
         groupId: m.groupId._id.toString(),

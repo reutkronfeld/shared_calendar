@@ -7,6 +7,10 @@ import { MembershipModel } from '../groups/membership.model.js';
 import { UserModel } from '../users/user.model.js';
 import { fetchBusyForUser, type BusyInterval } from '../calendar/freebusy.js';
 import { findOverlappingFreeSlots } from '../calendar/findSlots.js';
+import {
+  WeeklyAvailabilityModel,
+  type DayAvailability,
+} from '../availability/weekly.model.js';
 
 /**
  * Tools are built per-request with the user/group bound in closure, so the
@@ -139,9 +143,18 @@ export function buildChatTools(opts: { userId: string; groupId: string }) {
           _id: { $in: memberships.map((m) => m.userId) },
         }).lean();
 
+        const weeklyDocs = await WeeklyAvailabilityModel.find({
+          userId: { $in: users.map((u) => u._id) },
+        }).lean();
+        const weeklyByUser = new Map<string, DayAvailability[]>(
+          weeklyDocs.map((w) => [w.userId.toString(), w.daysAvailability]),
+        );
+
         const memberBusy: Array<BusyInterval[] | null> = [];
+        const memberWeekly: Array<DayAvailability[] | null> = [];
         const missing: Array<{ userId: string; name: string }> = [];
         for (const u of users) {
+          memberWeekly.push(weeklyByUser.get(u._id.toString()) ?? null);
           if (!u.refreshToken) {
             missing.push({ userId: u._id.toString(), name: u.name });
             memberBusy.push(null);
@@ -161,6 +174,7 @@ export function buildChatTools(opts: { userId: string; groupId: string }) {
           durationMinutes,
           timezone,
           constraints: group.constraints ?? DEFAULT_CONSTRAINTS,
+          memberWeekly,
         });
 
         return {

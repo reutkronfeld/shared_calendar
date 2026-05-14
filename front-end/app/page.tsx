@@ -9,7 +9,7 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
 
 export default async function Home() {
   const me = await getMe();
-  if (me) redirect('/groups');
+  if (me) redirect(me.user.onboarded ? '/groups' : '/onboarding');
 
   return (
     <section className="flex flex-1 items-center justify-center px-4 py-12">

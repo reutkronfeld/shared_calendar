@@ -132,6 +132,9 @@ export interface MeResponse {
     name: string;
     picture: string | null;
     defaultTimeZone: string;
+    hasGoogleSync: boolean;
+    hasWeeklyAvailability: boolean;
+    onboarded: boolean;
   };
   memberships: Array<{
     groupId: string;
