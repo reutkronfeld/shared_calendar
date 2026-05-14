@@ -23,6 +23,9 @@ const EnvSchema = z.object({
   TOKEN_ENC_KEY: z
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, 'TOKEN_ENC_KEY must be 64 hex chars (32 bytes)'),
+
+  OPENROUTER_API_KEY: z.string().min(1).optional(),
+  OPENROUTER_MODEL: z.string().default('anthropic/claude-haiku-4.5'),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

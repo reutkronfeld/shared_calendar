@@ -56,4 +56,20 @@ export default fp(async function googleOAuthPlugin(app: FastifyInstance) {
     generateStateFunction: () => randomUUID(),
     checkStateFunction: () => true,
   });
+
+  // Capture an optional `?next=` on the OAuth start request and stash it in a
+  // short-lived cookie. The callback handler reads + clears it to redirect the
+  // user back to where they were headed before login.
+  app.addHook('onRequest', async (req, reply) => {
+    if (req.url.split('?')[0] !== '/auth/google') return;
+    const next = (req.query as { next?: string } | undefined)?.next;
+    if (typeof next !== 'string' || !next.startsWith('/') || next.startsWith('//')) return;
+    reply.setCookie('oauth_next', next, {
+      path: '/',
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: env.COOKIE_SECURE,
+      maxAge: 60 * 10,
+    });
+  });
 });

@@ -6,6 +6,9 @@ import authPlugin from './plugins/auth.js';
 import googleOAuthPlugin from './plugins/oauth-google.js';
 import authRoutes from './modules/auth/routes.js';
 import groupRoutes from './modules/groups/routes.js';
+import calendarRoutes from './modules/calendar/routes.js';
+import availabilityRoutes from './modules/availability/routes.js';
+import chatRoutes from './modules/chat/routes.js';
 
 async function bootstrap(): Promise<void> {
   await connectMongo();
@@ -13,7 +16,14 @@ async function bootstrap(): Promise<void> {
   const app = Fastify({ logger: true });
 
   await app.register(cors, {
-    origin: env.FRONTEND_URL,
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true);
+      if (origin === env.FRONTEND_URL) return cb(null, true);
+      if (env.NODE_ENV === 'development' && /^http:\/\/localhost:\d+$/.test(origin)) {
+        return cb(null, true);
+      }
+      cb(new Error('not_allowed_by_cors'), false);
+    },
     credentials: true,
   });
 
@@ -22,6 +32,9 @@ async function bootstrap(): Promise<void> {
 
   await app.register(authRoutes);
   await app.register(groupRoutes);
+  await app.register(calendarRoutes);
+  await app.register(availabilityRoutes);
+  await app.register(chatRoutes);
 
   app.get('/health', async () => ({ ok: true, ts: new Date().toISOString() }));
 

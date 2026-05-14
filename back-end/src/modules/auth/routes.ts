@@ -50,7 +50,16 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     }
 
     app.issueSessionCookie(reply, user._id.toString());
-    reply.redirect(`${env.FRONTEND_URL}/groups`);
+
+    const rawNext = req.cookies?.oauth_next;
+    const next =
+      typeof rawNext === 'string' && rawNext.startsWith('/') && !rawNext.startsWith('//')
+        ? rawNext
+        : '/groups';
+    if (rawNext) {
+      reply.clearCookie('oauth_next', { path: '/' });
+    }
+    reply.redirect(`${env.FRONTEND_URL}${next}`);
   });
 
   app.post('/auth/logout', async (_req, reply) => {
