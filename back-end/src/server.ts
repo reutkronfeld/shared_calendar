@@ -25,6 +25,8 @@ async function bootstrap(): Promise<void> {
       cb(new Error('not_allowed_by_cors'), false);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   await app.register(authPlugin);

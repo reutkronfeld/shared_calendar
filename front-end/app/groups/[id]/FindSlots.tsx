@@ -5,12 +5,14 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { format } from 'date-fns';
 import { he } from 'date-fns/locale';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, MapPin } from 'lucide-react';
 import { toast } from 'sonner';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Calendar } from '@/components/ui/calendar';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
@@ -22,7 +24,7 @@ import {
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { api, type FindSlotsResponse } from '@/lib/api';
+import { api, type FindSlotsResponse, type NearMissSuggestion } from '@/lib/api';
 import {
   findSlotsFormSchema,
   type FindSlotsFormInput,
@@ -69,6 +71,7 @@ export function FindSlots({ groupId }: Props) {
   const autoRanRef = useRef(false);
 
   const {
+    register,
     handleSubmit,
     watch,
     setValue,
@@ -80,6 +83,7 @@ export function FindSlots({ groupId }: Props) {
       startDate: todayISO(),
       endDate: inDaysISO(7),
       durationMinutes: 30,
+      meetingLocation: '',
     },
   });
 
@@ -100,10 +104,14 @@ export function FindSlots({ groupId }: Props) {
           rangeEnd: rangeEnd.toISOString(),
           durationMinutes: values.durationMinutes,
           timezone,
+          meetingLocation: values.meetingLocation || undefined,
         });
         setResult(res);
         if (res.slots.length === 0 && !opts.silent) {
           toast.info('לא נמצאו זמנים פנויים בטווח שנבחר.');
+        }
+        if (values.meetingLocation && !res.meetingLocationResolved && !opts.silent) {
+          toast.warning('לא הצלחנו לזהות את הכתובת — מתעלמים מזמן נסיעה.');
         }
       } catch {
         if (!opts.silent) toast.error('חיפוש הזמנים נכשל. נסו שוב.');
@@ -167,6 +175,22 @@ export function FindSlots({ groupId }: Props) {
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-3">
+            <Label htmlFor="meeting-location">מיקום הפגישה (אופציונלי)</Label>
+            <div className="relative">
+              <MapPin className="absolute inset-e-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="meeting-location"
+                placeholder="לדוגמה: רוטשילד 22 תל אביב, או 'Zoom'"
+                className="pe-9"
+                {...register('meetingLocation')}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              אם נציין כתובת, נוסיף זמן נסיעה לבאפר של כל חבר.
+            </p>
           </div>
 
           <div className="sm:col-span-3">
@@ -235,22 +259,67 @@ function Results({ result }: { result: FindSlotsResponse }) {
           </AlertDescription>
         </Alert>
       )}
+
       {result.slots.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           לא נמצאו זמנים פנויים בטווח. נסו להרחיב את התאריכים או לשנות אילוצים.
         </p>
       ) : (
-        <ul className="space-y-2">
-          {result.slots.map((s) => (
-            <li
-              key={s.start}
-              className="rounded-md border bg-muted/40 px-4 py-3 text-sm"
-            >
-              {formatSlot(s.start, s.end)}
-            </li>
-          ))}
-        </ul>
+        <>
+          <h3 className="mb-2 text-sm font-medium">זמנים פנויים לכולם</h3>
+          <ul className="space-y-2">
+            {result.slots.map((s) => (
+              <li
+                key={s.start}
+                className="rounded-md border bg-muted/40 px-4 py-3 text-sm"
+              >
+                {formatSlot(s.start, s.end)}
+              </li>
+            ))}
+          </ul>
+        </>
       )}
+
+      {result.nearMisses && result.nearMisses.length > 0 && (
+        <NearMisses items={result.nearMisses} />
+      )}
+    </div>
+  );
+}
+
+function NearMisses({ items }: { items: NearMissSuggestion[] }) {
+  return (
+    <div className="mt-5">
+      <h3 className="mb-2 text-sm font-medium">
+        זמנים שהיו עובדים — אם נזיז אירוע אחד
+      </h3>
+      <p className="mb-3 text-xs text-muted-foreground">
+        רק אירועים גמישים מוצעים להזזה — אירועים קריטיים (רופא, חתונה וכו') לעולם לא.
+      </p>
+      <ul className="space-y-2">
+        {items.map((nm) => (
+          <li
+            key={nm.slotStart}
+            className="rounded-md border border-dashed bg-card px-4 py-3 text-sm"
+          >
+            <div className="font-medium">{formatSlot(nm.slotStart, nm.slotEnd)}</div>
+            <ul className="mt-2 space-y-1">
+              {nm.movableBlockers.map((b) => (
+                <li key={b.eventId} className="flex flex-wrap items-center gap-2 text-xs">
+                  <Badge variant="secondary">{b.memberName}</Badge>
+                  <span className="text-muted-foreground">צריך להזיז את</span>
+                  <span className="font-medium">
+                    {b.summary || 'אירוע ללא שם'}
+                  </span>
+                  <span className="text-muted-foreground" dir="ltr">
+                    ({formatSlot(b.start, b.end)})
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }

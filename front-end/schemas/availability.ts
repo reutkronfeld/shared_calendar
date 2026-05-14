@@ -13,16 +13,11 @@ export const findSlotsFormSchema = z
     startDate: z.string().min(1, 'נא לבחור תאריך התחלה'),
     endDate: z.string().min(1, 'נא לבחור תאריך סיום'),
     durationMinutes: intInRange(15, 8 * 60),
-    workHourStart: intInRange(0, 23),
-    workHourEnd: intInRange(1, 24),
+    meetingLocation: z.string().trim().max(200).optional(),
   })
   .refine((d) => new Date(d.endDate) >= new Date(d.startDate), {
     message: 'תאריך הסיום חייב להיות אחרי או שווה לתאריך ההתחלה',
     path: ['endDate'],
-  })
-  .refine((d) => d.workHourEnd > d.workHourStart, {
-    message: 'שעת הסיום חייבת להיות אחרי שעת ההתחלה',
-    path: ['workHourEnd'],
   });
 export type FindSlotsFormInput = z.input<typeof findSlotsFormSchema>;
 export type FindSlotsFormOutput = z.output<typeof findSlotsFormSchema>;

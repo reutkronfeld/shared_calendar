@@ -38,6 +38,7 @@ export const api = {
   signinUrl: () => `${BASE}/auth/google`,
   me: () => request<MeResponse>('/me'),
   logout: () => request<{ ok: true }>('/auth/logout', { method: 'POST' }),
+  completeOnboarding: () => request<{ ok: true }>('/me/complete-onboarding', { method: 'POST' }),
   createGroup: (name: string) =>
     request<{ id: string; code: string; name: string }>('/groups', {
       method: 'POST',
@@ -117,12 +118,30 @@ export interface FindSlotsRequest {
   rangeEnd: string;
   durationMinutes: number;
   timezone: string;
+  meetingLocation?: string;
+}
+
+export interface MovableBlocker {
+  memberId: string;
+  memberName: string;
+  eventId: string;
+  summary: string;
+  start: string;
+  end: string;
+}
+
+export interface NearMissSuggestion {
+  slotStart: string;
+  slotEnd: string;
+  movableBlockers: MovableBlocker[];
 }
 
 export interface FindSlotsResponse {
   slots: Array<{ start: string; end: string }>;
+  nearMisses: NearMissSuggestion[];
   missingAvailability: Array<{ userId: string; name: string }>;
   memberCount: number;
+  meetingLocationResolved: boolean;
 }
 
 export interface MeResponse {

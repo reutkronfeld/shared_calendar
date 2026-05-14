@@ -68,6 +68,14 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({ ok: true });
   });
 
+  // Mark onboarding as completed — called when user explicitly finishes or skips.
+  // Set `onboardedAt` so the redirect from /groups stops bouncing them back.
+  app.post('/me/complete-onboarding', { preHandler: [app.requireAuth] }, async (req, reply) => {
+    const userId = req.userId!;
+    await UserModel.updateOne({ _id: userId }, { $set: { onboardedAt: new Date() } });
+    return reply.send({ ok: true });
+  });
+
   app.get('/me', { preHandler: [app.requireAuth] }, async (req, reply) => {
     const userId = req.userId!;
     const user = await UserModel.findById(userId).lean();
@@ -94,7 +102,7 @@ export default async function authRoutes(app: FastifyInstance): Promise<void> {
         defaultTimeZone: user.defaultTimeZone,
         hasGoogleSync: !!user.refreshToken,
         hasWeeklyAvailability: hasWeekly,
-        onboarded: hasWeekly,
+        onboarded: !!user.onboardedAt || hasWeekly,
       },
       memberships: memberships.map((m) => ({
         groupId: m.groupId._id.toString(),

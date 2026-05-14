@@ -13,6 +13,7 @@ export interface User {
   picture?: string;
   refreshToken?: RefreshTokenEnc;
   defaultTimeZone: string;
+  onboardedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -33,6 +34,7 @@ const UserSchema = new Schema<User>(
     picture: { type: String },
     refreshToken: { type: RefreshTokenSchema, required: false },
     defaultTimeZone: { type: String, default: 'Asia/Jerusalem' },
+    onboardedAt: { type: Date, required: false },
   },
   { timestamps: true },
 );
