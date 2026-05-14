@@ -11,6 +11,13 @@ export interface CalEvent {
   location: string | null;
 }
 
+/**
+ * Fetch a user's Google Calendar events in [timeMin, timeMax). Unlike freebusy,
+ * this returns summary+location so we can classify importance and reason about
+ * travel between meetings.
+ *
+ * Filters out all-day events (no time) and cancelled events.
+ */
 export async function fetchEventsForUser(
   refreshTokenEnc: RefreshTokenEnc,
   timeMin: Date,
