@@ -9,13 +9,14 @@ export type ApiError = {
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = { ...(init?.headers as Record<string, string> ?? {}) };
+  if (init?.body !== undefined && headers['Content-Type'] === undefined) {
+    headers['Content-Type'] = 'application/json';
+  }
   const res = await fetch(`${BASE}${path}`, {
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers ?? {}),
-    },
     ...init,
+    headers,
   });
 
   if (!res.ok) {
@@ -47,7 +48,82 @@ export const api = {
       '/groups/join',
       { method: 'POST', body: JSON.stringify({ code }) },
     ),
+  findSlots: (groupId: string, body: FindSlotsRequest) =>
+    request<FindSlotsResponse>(`/groups/${groupId}/find-slots`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  updateConstraints: (groupId: string, body: Partial<GroupConstraints>) =>
+    request<GroupConstraints>(`/groups/${groupId}/constraints`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  rotateGroupCode: (groupId: string) =>
+    request<{ id: string; code: string; name: string }>(`/groups/${groupId}/rotate-code`, {
+      method: 'POST',
+    }),
+  deleteGroup: (groupId: string) =>
+    request<void>(`/groups/${groupId}`, { method: 'DELETE' }),
+  listOverrides: () => request<AvailabilityOverride[]>('/me/overrides'),
+  createOverride: (body: { start: string; end: string; type: 'busy' | 'free'; note?: string }) =>
+    request<AvailabilityOverride>('/me/overrides', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+  deleteOverride: (id: string) =>
+    request<void>(`/me/overrides/${id}`, { method: 'DELETE' }),
+  getWeeklyAvailability: () =>
+    request<{ daysAvailability: WeeklyDayAvailability[] }>('/me/weekly-availability'),
+  updateWeeklyAvailability: (daysAvailability: WeeklyDayAvailability[]) =>
+    request<{ daysAvailability: WeeklyDayAvailability[] }>('/me/weekly-availability', {
+      method: 'PUT',
+      body: JSON.stringify({ daysAvailability }),
+    }),
 };
+
+export interface WeeklyTimeRange {
+  startMinute: number;
+  endMinute: number;
+}
+
+export interface WeeklyDayAvailability {
+  day: number;
+  enabled: boolean;
+  timeRanges: WeeklyTimeRange[];
+}
+
+export interface AvailabilityOverride {
+  id: string;
+  start: string;
+  end: string;
+  type: 'busy' | 'free';
+  note: string | null;
+}
+
+export interface GroupConstraints {
+  excludedWeekdays: number[];
+  /** Minute of day (0-1439). */
+  noEarlierThan: number;
+  /** Minute of day (1-1440, exclusive). */
+  noLaterThan: number;
+  lunchBreak: { enabled: boolean; startMinute: number; endMinute: number };
+  bufferMinutes: number;
+  minNoticeHours: number;
+  excludedDates: string[];
+}
+
+export interface FindSlotsRequest {
+  rangeStart: string;
+  rangeEnd: string;
+  durationMinutes: number;
+  timezone: string;
+}
+
+export interface FindSlotsResponse {
+  slots: Array<{ start: string; end: string }>;
+  missingAvailability: Array<{ userId: string; name: string }>;
+  memberCount: number;
+}
 
 export interface MeResponse {
   user: {

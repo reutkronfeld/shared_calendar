@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 const PROTECTED_PREFIXES = ['/groups'];
 
 export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const { pathname, search } = req.nextUrl;
   const protectedRoute = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
   if (!protectedRoute) return NextResponse.next();
 
@@ -14,7 +14,8 @@ export function middleware(req: NextRequest) {
   if (!session) {
     const url = req.nextUrl.clone();
     url.pathname = '/signin';
-    url.searchParams.set('next', pathname);
+    url.search = '';
+    url.searchParams.set('next', `${pathname}${search}`);
     return NextResponse.redirect(url);
   }
   return NextResponse.next();

@@ -2,51 +2,69 @@
 
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
-import { api, type ApiError } from '../../../lib/api';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { toast } from 'sonner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { api, type ApiError } from '@/lib/api';
+import { joinGroupSchema, type JoinGroupInput } from '@/schemas/groups';
 
-export function JoinForm() {
-  const [code, setCode] = useState('');
-  const [error, setError] = useState<string | null>(null);
+interface Props {
+  initialCode?: string;
+}
+
+export function JoinForm({ initialCode = '' }: Props) {
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    const trimmed = code.trim();
-    if (!trimmed) return;
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isValid },
+  } = useForm<JoinGroupInput>({
+    resolver: zodResolver(joinGroupSchema),
+    mode: 'onChange',
+    defaultValues: { code: initialCode },
+  });
 
+  function onSubmit(values: JoinGroupInput) {
+    setSubmitError(null);
     startTransition(async () => {
       try {
-        const group = await api.joinGroup(trimmed);
+        const group = await api.joinGroup(values.code);
         router.push(`/groups/${group.id}`);
         router.refresh();
       } catch (err) {
         const e = err as ApiError;
-        if (e.status === 404) setError('No group with that code.');
+        if (e.status === 404) toast.error('לא נמצאה קבוצה עם הקוד הזה.');
         else if (e.status === 401) router.push('/signin');
-        else setError('Could not join. Please try again.');
+        else setSubmitError('ההצטרפות נכשלה. נסו שוב.');
       }
     });
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4">
-      <input
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+      <Input
         autoFocus
-        value={code}
-        onChange={(e) => setCode(e.target.value)}
         placeholder="happy-tiger-42"
-        className="w-full rounded-xl border border-zinc-300 bg-white px-4 py-3 text-base font-mono focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 dark:border-zinc-700 dark:bg-zinc-900"
+        dir="ltr"
+        className="font-mono text-base"
+        aria-invalid={errors.code ? 'true' : 'false'}
+        {...register('code')}
       />
-      {error && <p className="text-sm text-rose-600">{error}</p>}
-      <button
-        type="submit"
-        disabled={isPending || !code.trim()}
-        className="w-full rounded-xl bg-indigo-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-indigo-700 disabled:opacity-50"
-      >
-        {isPending ? 'Joining…' : 'Join'}
-      </button>
+      {errors.code && <p className="text-sm text-destructive">{errors.code.message}</p>}
+      {submitError && (
+        <Alert variant="destructive">
+          <AlertDescription>{submitError}</AlertDescription>
+        </Alert>
+      )}
+      <Button type="submit" disabled={isPending || !isValid} size="lg" className="w-full">
+        {isPending ? 'מצטרף…' : 'הצטרפות'}
+      </Button>
     </form>
   );
 }

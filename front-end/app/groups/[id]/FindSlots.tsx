@@ -1,0 +1,259 @@
+'use client';
+
+import { useState, useTransition } from 'react';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { format } from 'date-fns';
+import { he } from 'date-fns/locale';
+import { CalendarIcon } from 'lucide-react';
+import { toast } from 'sonner';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Calendar } from '@/components/ui/calendar';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Separator } from '@/components/ui/separator';
+import { cn } from '@/lib/utils';
+import { api, type FindSlotsResponse } from '@/lib/api';
+import {
+  findSlotsFormSchema,
+  type FindSlotsFormInput,
+  type FindSlotsFormOutput,
+} from '@/schemas/availability';
+
+interface Props {
+  groupId: string;
+}
+
+const DURATION_OPTIONS = [
+  { value: '15', label: '15 דקות' },
+  { value: '30', label: '30 דקות' },
+  { value: '45', label: '45 דקות' },
+  { value: '60', label: 'שעה' },
+  { value: '90', label: 'שעה וחצי' },
+  { value: '120', label: 'שעתיים' },
+];
+
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+function inDaysISO(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+function parseLocalDate(iso: string): Date | undefined {
+  if (!iso) return undefined;
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return undefined;
+  return new Date(y, m - 1, d);
+}
+function toISODate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+export function FindSlots({ groupId }: Props) {
+  const [result, setResult] = useState<FindSlotsResponse | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  const {
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isValid },
+  } = useForm<FindSlotsFormInput, unknown, FindSlotsFormOutput>({
+    resolver: zodResolver(findSlotsFormSchema),
+    mode: 'onChange',
+    defaultValues: {
+      startDate: todayISO(),
+      endDate: inDaysISO(7),
+      durationMinutes: 30,
+    },
+  });
+
+  const startDate = watch('startDate');
+  const endDate = watch('endDate');
+  const duration = watch('durationMinutes');
+
+  function onSubmit(values: FindSlotsFormOutput) {
+    setResult(null);
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jerusalem';
+    const rangeStart = new Date(`${values.startDate}T00:00:00`);
+    const rangeEnd = new Date(`${values.endDate}T23:59:59`);
+
+    startTransition(async () => {
+      try {
+        const res = await api.findSlots(groupId, {
+          rangeStart: rangeStart.toISOString(),
+          rangeEnd: rangeEnd.toISOString(),
+          durationMinutes: values.durationMinutes,
+          timezone,
+        });
+        setResult(res);
+        if (res.slots.length === 0) {
+          toast.info('לא נמצאו זמנים פנויים בטווח שנבחר.');
+        }
+      } catch {
+        toast.error('חיפוש הזמנים נכשל. נסו שוב.');
+      }
+    });
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-base">מציאת זמן פגישה משותף</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit(onSubmit)} className="grid gap-4 sm:grid-cols-3">
+          <div className="space-y-1.5 sm:col-span-1">
+            <Label>מתאריך</Label>
+            <DatePickerField
+              value={startDate}
+              onChange={(d) => setValue('startDate', d ? toISODate(d) : '', { shouldValidate: true })}
+              error={errors.startDate?.message}
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-1">
+            <Label>עד תאריך</Label>
+            <DatePickerField
+              value={endDate}
+              onChange={(d) => setValue('endDate', d ? toISODate(d) : '', { shouldValidate: true })}
+              error={errors.endDate?.message}
+            />
+          </div>
+          <div className="space-y-1.5 sm:col-span-1">
+            <Label>משך הפגישה</Label>
+            <Select
+              dir="rtl"
+              value={String(duration)}
+              onValueChange={(v) => setValue('durationMinutes', Number(v) as FindSlotsFormInput['durationMinutes'], { shouldValidate: true })}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="בחר משך" />
+              </SelectTrigger>
+              <SelectContent>
+                {DURATION_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="sm:col-span-3">
+            <Button type="submit" disabled={!isValid || isPending}>
+              {isPending ? 'מחפש זמנים…' : 'מצא זמנים פנויים'}
+            </Button>
+          </div>
+        </form>
+
+        {result && <Results result={result} />}
+      </CardContent>
+    </Card>
+  );
+}
+
+function DatePickerField({
+  value,
+  onChange,
+  error,
+}: {
+  value: string;
+  onChange: (d: Date | undefined) => void;
+  error?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const parsed = parseLocalDate(value);
+  return (
+    <>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            type="button"
+            variant="outline"
+            className={cn('w-full justify-start font-normal', !parsed && 'text-muted-foreground')}
+          >
+            <CalendarIcon className="size-4" />
+            {parsed ? format(parsed, 'PPP', { locale: he }) : 'בחר תאריך'}
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-auto p-0">
+          <Calendar
+            mode="single"
+            selected={parsed}
+            onSelect={(d) => {
+              onChange(d);
+              setOpen(false);
+            }}
+            locale={he}
+          />
+        </PopoverContent>
+      </Popover>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+    </>
+  );
+}
+
+function Results({ result }: { result: FindSlotsResponse }) {
+  return (
+    <div className="mt-5">
+      <Separator className="mb-4" />
+      {result.missingAvailability.length > 0 && (
+        <Alert className="mb-3">
+          <AlertDescription>
+            לא הצלחנו לקרוא את הזמינות של:{' '}
+            {result.missingAvailability.map((m) => m.name).join(', ')}. ההצעות להלן מבוססות רק על שאר החברים.
+          </AlertDescription>
+        </Alert>
+      )}
+      {result.slots.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          לא נמצאו זמנים פנויים בטווח. נסו להרחיב את התאריכים או לשנות אילוצים.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {result.slots.map((s) => (
+            <li
+              key={s.start}
+              className="rounded-md border bg-muted/40 px-4 py-3 text-sm"
+            >
+              {formatSlot(s.start, s.end)}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function formatSlot(startISO: string, endISO: string): string {
+  const start = new Date(startISO);
+  const end = new Date(endISO);
+  const day = new Intl.DateTimeFormat('he-IL', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  }).format(start);
+  const startTime = new Intl.DateTimeFormat('he-IL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(start);
+  const endTime = new Intl.DateTimeFormat('he-IL', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(end);
+  return `${day}, ${startTime}–${endTime}`;
+}
