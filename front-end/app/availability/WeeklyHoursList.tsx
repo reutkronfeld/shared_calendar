@@ -85,7 +85,9 @@ export function WeeklyHoursList({ initial, onSaved, saveLabel }: Props) {
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setServer(initialNormalized);
+     
     setLocal(initialNormalized);
   }, [initialNormalized]);
 

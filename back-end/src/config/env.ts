@@ -26,6 +26,8 @@ const EnvSchema = z.object({
 
   OPENROUTER_API_KEY: z.string().min(1).optional(),
   OPENROUTER_MODEL: z.string().default('anthropic/claude-haiku-4.5'),
+
+  RESEND_API_KEY: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

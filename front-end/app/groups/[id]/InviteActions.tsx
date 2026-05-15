@@ -33,6 +33,7 @@ export function InviteActions({ groupId, groupName, code, isOrganizer }: Props) 
   const router = useRouter();
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOrigin(window.location.origin);
   }, []);
 

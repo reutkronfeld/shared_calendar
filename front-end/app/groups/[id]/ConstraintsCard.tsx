@@ -239,7 +239,7 @@ export function ConstraintsCard({ groupId, initial, canEdit }: Props) {
 
             <section className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">
-                <Label htmlFor="buffer">Buffer בין פגישות (דקות)</Label>
+                <Label htmlFor="buffer">מרווח בין אירועים (דקות)</Label>
                 <Input id="buffer" type="number" min={0} max={240} {...register('bufferMinutes')} />
                 <p className="text-xs text-muted-foreground">רווח לפני/אחרי כל אירוע ביומן.</p>
               </div>

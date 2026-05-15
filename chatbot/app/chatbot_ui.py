@@ -1,109 +1,136 @@
 from langchain_openai import ChatOpenAI
-from langchain.chains import LLMChain
+from langchain.agents import AgentExecutor, create_openai_tools_agent
 from langchain_community.callbacks import StreamlitCallbackHandler
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.tools import tool
 from langchain.memory import ConversationBufferWindowMemory
 import streamlit as st
 import requests
 import time
 import json
 import os 
+from dotenv import load_dotenv
 
-model_service = os.getenv("MODEL_ENDPOINT",
-                          "http://localhost:8001")
-model_service = "https://openrouter.ai/api/v1/chat/completions"
-model_service = f"{model_service}/v1"
-model_service_bearer = os.getenv("MY_TOKEN")
-request_kwargs = {}
-if model_service_bearer is not None:
-    request_kwargs = {"headers": {"Authorization": f"Bearer {model_service_bearer}"}}
+# Try to load environment variables
+script_dir = os.path.dirname(__file__)
+for env_file in ['.env', 'token.env']:
+    env_path = os.path.join(script_dir, env_file)
+    if os.path.exists(env_path):
+        load_dotenv(env_path)
 
-@st.cache_resource(show_spinner=False)
-def checking_model_service():
-    start = time.time()
-    print("Checking Model Service Availability...")
-    ready = False
-    while not ready:
-        try:
-            request_cpp = requests.get(f'{model_service}/models', **request_kwargs)
-            request_ollama = requests.get(f'{model_service[:-2]}api/tags', **request_kwargs)
-            if request_cpp.status_code == 200:
-                server = "Llamacpp_Python"
-                ready = True
-            elif request_ollama.status_code == 200:
-                server = "Ollama"
-                ready = True        
-        except:
-            pass
-        time.sleep(1)
-    print(f"{server} Model Service Available")
-    print(f"{time.time()-start} seconds")
-    return server 
+# --- Streamlit Config ---
+st.set_page_config(page_title="עוזר תזמון חכם", layout="wide")
 
-def get_models():
+# --- Context Logic ---
+@st.cache_data(ttl=300) # Cache for 5 minutes
+def fetch_group_context(group_id: str):
     try:
-        response = requests.get(f"{model_service[:-2]}api/tags", **request_kwargs)
-        return [i["name"].split(":")[0] for i in  
-            json.loads(response.content)["models"]]
-    except:
+        resp = requests.get(f"http://localhost:4001/internal/groups/{group_id}/context", timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except Exception as e:
+        st.error(f"שגיאה בחיבור לשרת: {e}")
         return None
 
-with st.spinner("Checking Model Service Availability..."):
-    server = checking_model_service()
+group_id = st.query_params.get("groupId")
+group_context = fetch_group_context(group_id) if group_id else None
 
-def enableInput():
-    st.session_state["input_disabled"] = False
+if group_context:
+    CURRENT_CALENDARS = group_context.get("calendars", {})
+    MEMBER_NAMES = [m["name"] for m in group_context.get("members", [])]
+else:
+    MEMBER_NAMES = ["Alice", "Bob", "Charlie"]
+    CURRENT_CALENDARS = {
+        "Alice": [{"title": "Meeting", "start": "2026-05-15T09:00:00", "end": "2026-05-15T10:00:00", "flexible": False}],
+        "Bob": [],
+        "Charlie": []
+    }
 
-def disableInput():
-    st.session_state["input_disabled"] = True
+# --- Tools ---
+@tool
+def get_calendar(user_name: str) -> str:
+    """Get the calendar events for a specific user by their name."""
+    events = CURRENT_CALENDARS.get(user_name, [])
+    return json.dumps(events, indent=2) if events else f"No events found for {user_name}."
 
-st.title("💬 Chatbot")  
+@tool
+def get_group_availability() -> str:
+    """Get a summary of when everyone in the group is busy."""
+    return json.dumps(CURRENT_CALENDARS, indent=2)
+
+@tool
+def propose_reschedule(user_name: str, event_id: str, suggested_new_time: str) -> str:
+    """Proposes to move a flexible meeting. Use only if a group meeting is blocked."""
+    return f"שלחנו הודעה ל-{user_name} לבדוק אם אפשר להזיז את האירוע {event_id} לזמן {suggested_new_time}."
+
+tools = [get_calendar, get_group_availability, propose_reschedule]
+
+# --- AI Setup ---
+model_service = os.getenv("MODEL_ENDPOINT", "https://openrouter.ai/api/v1")
+model_service_bearer = os.getenv("MY_TOKEN")
+model_name = os.getenv("OPENROUTER_MODEL", "openai/gpt-4o-mini")
+
+llm = ChatOpenAI(
+    base_url=model_service, 
+    api_key=model_service_bearer,
+    model=model_name,
+    streaming=True,
+)
+
+prompt_template = ChatPromptTemplate.from_messages([
+    ("system", f"אתה עוזר תזמון חכם עבור הקבוצה: {', '.join(MEMBER_NAMES)}.\n"
+               "התפקיד שלך הוא למצוא זמן שמתאים לכולם.\n"
+               "אסטרטגיה:\n"
+               "1. תמיד תתחיל בבדיקת 'get_group_availability'.\n"
+               "2. אם מצאת זמן פנוי לכולם, תציע אותו.\n"
+               "3. אם יש אירועים 'גמישים' (flexible: true) שמפריעים, תשתמש ב-'propose_reschedule'.\n"
+               "4. תענה תמיד בעברית בצורה מקצועית ותמציתית."),
+    MessagesPlaceholder(variable_name="chat_history"),
+    ("user", "{input}"),
+    MessagesPlaceholder(variable_name="agent_scratchpad"),
+])
+
+@st.cache_resource()
+def get_memory():
+    return ConversationBufferWindowMemory(return_messages=True, k=10, memory_key="chat_history")
+
+agent = create_openai_tools_agent(llm, tools, prompt_template)
+agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True, memory=get_memory(), handle_parsing_errors=True)
+
+# --- UI Layout ---
+st.title("📅 עוזר תזמון קבוצתי")
+
+if group_context:
+    st.sidebar.success(f"מחובר לקבוצה עם {len(MEMBER_NAMES)} חברים")
+    for name in MEMBER_NAMES:
+        st.sidebar.text(f"• {name}")
+else:
+    st.sidebar.warning("מצב דמו - נתונים פיקטיביים")
+
 if "messages" not in st.session_state:
-    st.session_state["messages"] = [{"role": "assistant", 
-                                     "content": "How can I help you?"}]
-if "input_disabled" not in st.session_state:
-    enableInput()
+    st.session_state.messages = [{"role": "assistant", "content": f"שלום! אני עוזר התזמון של {', '.join(MEMBER_NAMES)}. איך אוכל לעזור היום?"}]
 
+# Display chat history
 for msg in st.session_state.messages:
     st.chat_message(msg["role"]).write(msg["content"])
 
-@st.cache_resource()
-def memory():
-    memory = ConversationBufferWindowMemory(return_messages=True,k=3)
-    return memory
-
-model_name = os.getenv("MODEL_NAME", "") 
-
-if server == "Ollama":
-    models = get_models()
-    with st.sidebar:
-        model_name = st.radio(label="Select Model",
-            options=models)
-
-llm = ChatOpenAI(base_url=model_service, 
-        api_key="sk-no-key-required" if model_service_bearer is None else model_service_bearer,
-        model=model_name,
-        streaming=True,
-        callbacks=[StreamlitCallbackHandler(st.empty(),
-                                            expand_new_thoughts=True,
-                                            collapse_completed_thoughts=True)])
-
-prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are world class technical advisor."),
-    MessagesPlaceholder(variable_name="history"),
-    ("user", "{input}")
-])
-
-chain = LLMChain(llm=llm, 
-                prompt=prompt,
-                verbose=False,
-                memory=memory())
-
-if prompt := st.chat_input(disabled=st.session_state["input_disabled"],on_submit=disableInput):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    st.chat_message("user").markdown(prompt)
-    response = chain.invoke(prompt)
-    st.chat_message("assistant").markdown(response["text"])    
-    st.session_state.messages.append({"role": "assistant", "content": response["text"]})
-    enableInput()
+# Chat input
+if user_input := st.chat_input():
+    st.session_state.messages.append({"role": "user", "content": user_input})
+    st.chat_message("user").write(user_input)
+    
+    with st.chat_message("assistant"):
+        container = st.container()
+        st_callback = StreamlitCallbackHandler(container)
+        try:
+            # We don't use st.write directly inside the thinking block to avoid rerun conflicts
+            response = agent_executor.invoke({"input": user_input}, {"callbacks": [st_callback]})
+            output = response["output"]
+            st.session_state.messages.append({"role": "assistant", "content": output})
+            st.write(output)
+        except Exception as e:
+            st.error(f"שגיאה: {e}")
+    
+    # Force refresh to update the history properly
     st.rerun()

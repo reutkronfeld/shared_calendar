@@ -154,7 +154,10 @@ export function findOverlappingFreeSlotsRich(
     // Each member's weekly schedule must accept this slot.
     let weeklyOk = true;
     for (const m of members) {
-      if (m.events === null) continue; // unknown — skip member entirely
+      if (m.events === null) {
+        // Unknown availability — we can't be sure it's okay, so we'll treat it as blocked by a virtual movable event later.
+        continue;
+      }
       if (!fitsWeekly(slotStart, slotEnd, m.weekly, timezone)) {
         weeklyOk = false;
         break;
@@ -166,7 +169,19 @@ export function findOverlappingFreeSlotsRich(
     const movableBlockers: BlockingEvent[] = [];
 
     for (const m of members) {
-      if (m.events === null) continue;
+      if (m.events === null) {
+        // UNKNOWN availability member: Treat as a movable blocker for EVERY slot 
+        // to prevent false "perfect slots".
+        movableBlockers.push({
+          memberId: m.userId,
+          memberName: m.name,
+          eventId: `unknown-${m.userId}`,
+          summary: 'זמינות לא ידועה (טרם סונכרן יומן)',
+          start: slotStart,
+          end: slotEnd,
+        });
+        continue;
+      }
       for (const ev of m.events) {
         const eff = effectiveBlockInterval(ev, meetingLocation, baseBufferMs);
         if (eff.start < slotEnd.getTime() && eff.end > slotStart.getTime()) {

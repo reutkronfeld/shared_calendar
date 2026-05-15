@@ -46,11 +46,21 @@ export async function fetchEventsForUser(
   const out: CalEvent[] = [];
   for (const it of items) {
     if (it.status === 'cancelled') continue;
-    const startStr = it.start?.dateTime;
-    const endStr = it.end?.dateTime;
-    if (!startStr || !endStr) continue;
-    const start = new Date(startStr);
-    const end = new Date(endStr);
+    
+    let start: Date;
+    let end: Date;
+
+    if (it.start?.dateTime && it.end?.dateTime) {
+      start = new Date(it.start.dateTime);
+      end = new Date(it.end.dateTime);
+    } else if (it.start?.date && it.end?.date) {
+      // All-day event
+      start = new Date(`${it.start.date}T00:00:00`);
+      end = new Date(`${it.end.date}T23:59:59`);
+    } else {
+      continue;
+    }
+
     if (isNaN(start.getTime()) || isNaN(end.getTime())) continue;
     out.push({
       id: it.id ?? `${start.toISOString()}`,
@@ -61,4 +71,45 @@ export async function fetchEventsForUser(
     });
   }
   return out;
+}
+
+/**
+ * Inserts a new event into the user's Google Calendar.
+ */
+export async function insertEventForUser(
+  refreshTokenEnc: RefreshTokenEnc,
+  params: {
+    start: Date;
+    end: Date;
+    summary: string;
+    location?: string;
+    description?: string;
+  },
+): Promise<string> {
+  const refreshToken = decrypt(refreshTokenEnc);
+
+  const oauth2 = new google.auth.OAuth2(
+    env.GOOGLE_CLIENT_ID,
+    env.GOOGLE_CLIENT_SECRET,
+    env.GOOGLE_REDIRECT_URI,
+  );
+  oauth2.setCredentials({ refresh_token: refreshToken });
+
+  const calendar = google.calendar({ version: 'v3', auth: oauth2 });
+  const res = await calendar.events.insert({
+    calendarId: 'primary',
+    requestBody: {
+      summary: params.summary,
+      location: params.location,
+      description: params.description,
+      start: { dateTime: params.start.toISOString() },
+      end: { dateTime: params.end.toISOString() },
+    },
+  });
+
+  if (!res.data.id) {
+    throw new Error('failed_to_insert_event');
+  }
+
+  return res.data.id;
 }

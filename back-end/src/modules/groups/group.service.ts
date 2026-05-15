@@ -23,6 +23,7 @@ export interface GroupMember {
   picture: string | null;
   role: 'organizer' | 'member';
   joinedAt: Date;
+  hasGoogleSync: boolean;
 }
 
 export interface GroupDetail extends GroupSummary {
@@ -92,7 +93,7 @@ export async function getGroupDetail(
   if (!group) throw new ServiceError('group_not_found', 404);
 
   const members = await MembershipModel.find({ groupId })
-    .populate<{ userId: User }>({ path: 'userId', select: 'name email picture' })
+    .populate<{ userId: User }>({ path: 'userId', select: 'name email picture refreshToken' })
     .lean();
 
   return {
@@ -108,6 +109,7 @@ export async function getGroupDetail(
       picture: m.userId.picture ?? null,
       role: m.role,
       joinedAt: m.joinedAt,
+      hasGoogleSync: !!m.userId.refreshToken,
     })),
   };
 }

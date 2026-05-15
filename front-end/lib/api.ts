@@ -54,6 +54,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(body),
     }),
+  scheduleMeeting: (groupId: string, body: ScheduleRequest) =>
+    request<ScheduleResponse>(`/groups/${groupId}/schedule`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
   updateConstraints: (groupId: string, body: Partial<GroupConstraints>) =>
     request<GroupConstraints>(`/groups/${groupId}/constraints`, {
       method: 'PATCH',
@@ -73,6 +78,8 @@ export const api = {
     }),
   deleteOverride: (id: string) =>
     request<void>(`/me/overrides/${id}`, { method: 'DELETE' }),
+  getNegotiationSession: (id: string) =>
+    request<NegotiationSession>(`/negotiate/${id}`),
   getWeeklyAvailability: () =>
     request<{ daysAvailability: WeeklyDayAvailability[] }>('/me/weekly-availability'),
   updateWeeklyAvailability: (daysAvailability: WeeklyDayAvailability[]) =>
@@ -143,6 +150,34 @@ export interface FindSlotsResponse {
   memberCount: number;
   meetingLocationResolved: boolean;
 }
+
+export interface ScheduleRequest extends FindSlotsRequest {
+  title: string;
+}
+
+export interface NegotiationSession {
+  _id: string;
+  groupId: string;
+  creatorId: string;
+  title: string;
+  slotStart: string;
+  slotEnd: string;
+  durationMinutes: number;
+  location?: string;
+  pendingMembers: Array<{
+    userId: string;
+    eventId: string;
+    summary: string;
+    originalStart: string;
+    originalEnd: string;
+    status: 'pending' | 'accepted' | 'declined';
+  }>;
+  status: 'active' | 'completed' | 'failed';
+}
+
+export type ScheduleResponse =
+  | { status: 'scheduled'; slot: { start: string; end: string } }
+  | { status: 'negotiating'; sessionId: string; blockerCount: number };
 
 export interface MeResponse {
   user: {

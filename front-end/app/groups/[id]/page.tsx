@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { cookies } from 'next/headers';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Sparkles } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +35,7 @@ interface GroupDetail {
     picture: string | null;
     role: 'organizer' | 'member';
     joinedAt: string;
+    hasGoogleSync: boolean;
   }>;
 }
 
@@ -80,10 +81,12 @@ export default async function GroupPage({ params }: PageProps) {
       </Button>
 
       <header className="flex items-baseline justify-between gap-4">
-        <h1 className="text-2xl font-semibold tracking-tight">{group.name}</h1>
-        <code className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground" dir="ltr">
-          {group.code}
-        </code>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-semibold tracking-tight">{group.name}</h1>
+          <code className="rounded bg-muted px-2 py-1 font-mono text-xs text-muted-foreground" dir="ltr">
+            {group.code}
+          </code>
+        </div>
       </header>
 
       <InviteActions groupId={group.id} groupName={group.name} code={group.code} isOrganizer={isOrganizer} />
@@ -116,24 +119,20 @@ export default async function GroupPage({ params }: PageProps) {
                 <Badge variant={m.role === 'organizer' ? 'default' : 'secondary'}>
                   {m.role === 'organizer' ? 'מארגן' : 'חבר'}
                 </Badge>
+                {!m.hasGoogleSync && (
+                  <Badge variant="destructive" className="bg-amber-500 hover:bg-amber-600 border-none">
+                    לא סונכרן יומן
+                  </Badge>
+                )}
               </li>
             ))}
           </ul>
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="find-slots" dir="rtl">
-        <TabsList>
-          <TabsTrigger value="find-slots">מציאת זמן</TabsTrigger>
-          <TabsTrigger value="assistant">עוזר חכם</TabsTrigger>
-        </TabsList>
-        <TabsContent value="find-slots">
-          <FindSlots groupId={group.id} />
-        </TabsContent>
-        <TabsContent value="assistant">
-          <ChatAssistant groupId={group.id} />
-        </TabsContent>
-      </Tabs>
+      <div className="mt-6">
+        <FindSlots groupId={group.id} />
+      </div>
 
       <ConstraintsCard
         groupId={group.id}

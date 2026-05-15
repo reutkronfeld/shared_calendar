@@ -68,6 +68,7 @@ function toISODate(d: Date): string {
 export function FindSlots({ groupId }: Props) {
   const [result, setResult] = useState<FindSlotsResponse | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [meetingTitle, setMeetingTitle] = useState('פגישת קבוצה');
   const autoRanRef = useRef(false);
 
   const {
@@ -91,6 +92,34 @@ export function FindSlots({ groupId }: Props) {
   const endDate = watch('endDate');
   const duration = watch('durationMinutes');
 
+  function handleSchedule() {
+    const values = watch();
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jerusalem';
+    const rangeStart = new Date(`${values.startDate}T00:00:00`);
+    const rangeEnd = new Date(`${values.endDate}T23:59:59`);
+
+    startTransition(async () => {
+      try {
+        const res = await api.scheduleMeeting(groupId, {
+          title: meetingTitle,
+          rangeStart: rangeStart.toISOString(),
+          rangeEnd: rangeEnd.toISOString(),
+          durationMinutes: values.durationMinutes,
+          timezone,
+          meetingLocation: values.meetingLocation || undefined,
+        });
+
+        if (res.status === 'scheduled') {
+          toast.success('הפגישה נקבעה בהצלחה לכולם!');
+        } else if (res.status === 'negotiating') {
+          toast.info(`נשלחו הודעות ל-${res.blockerCount} חברים לתיאום מחדש.`);
+        }
+      } catch (err: any) {
+        toast.error(err.message || 'החיפוש נכשל. נסו שוב.');
+      }
+    });
+  }
+
   function runSearch(values: FindSlotsFormOutput, opts: { silent?: boolean } = {}) {
     setResult(null);
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Jerusalem';
@@ -107,7 +136,11 @@ export function FindSlots({ groupId }: Props) {
           meetingLocation: values.meetingLocation || undefined,
         });
         setResult(res);
-        if (res.slots.length === 0 && !opts.silent) {
+        if (res.slots.length === 0 && res.nearMisses.length > 0) {
+          // No free slots, but we have near misses — trigger automatic negotiation!
+          toast.info('לא נמצאו זמנים פנויים, מתחיל תהליך תיאום אוטומטי...');
+          handleSchedule();
+        } else if (res.slots.length === 0 && !opts.silent) {
           toast.info('לא נמצאו זמנים פנויים בטווח שנבחר.');
         }
         if (values.meetingLocation && !res.meetingLocationResolved && !opts.silent) {
@@ -178,6 +211,16 @@ export function FindSlots({ groupId }: Props) {
           </div>
 
           <div className="space-y-1.5 sm:col-span-3">
+            <Label htmlFor="meeting-title">נושא הפגישה</Label>
+            <Input
+              id="meeting-title"
+              value={meetingTitle}
+              onChange={(e) => setMeetingTitle(e.target.value)}
+              placeholder="לדוגמה: ישיבת צוות, תכנון טיול"
+            />
+          </div>
+
+          <div className="space-y-1.5 sm:col-span-3">
             <Label htmlFor="meeting-location">מיקום הפגישה (אופציונלי)</Label>
             <div className="relative">
               <MapPin className="absolute inset-e-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -193,7 +236,7 @@ export function FindSlots({ groupId }: Props) {
             </p>
           </div>
 
-          <div className="sm:col-span-3">
+          <div className="flex flex-wrap gap-2 sm:col-span-3">
             <Button type="submit" disabled={!isValid || isPending}>
               {isPending ? 'מחפש זמנים…' : 'מצא זמנים פנויים'}
             </Button>
@@ -279,47 +322,6 @@ function Results({ result }: { result: FindSlotsResponse }) {
           </ul>
         </>
       )}
-
-      {result.nearMisses && result.nearMisses.length > 0 && (
-        <NearMisses items={result.nearMisses} />
-      )}
-    </div>
-  );
-}
-
-function NearMisses({ items }: { items: NearMissSuggestion[] }) {
-  return (
-    <div className="mt-5">
-      <h3 className="mb-2 text-sm font-medium">
-        זמנים שהיו עובדים — אם נזיז אירוע אחד
-      </h3>
-      <p className="mb-3 text-xs text-muted-foreground">
-        רק אירועים גמישים מוצעים להזזה — אירועים קריטיים (רופא, חתונה וכו') לעולם לא.
-      </p>
-      <ul className="space-y-2">
-        {items.map((nm) => (
-          <li
-            key={nm.slotStart}
-            className="rounded-md border border-dashed bg-card px-4 py-3 text-sm"
-          >
-            <div className="font-medium">{formatSlot(nm.slotStart, nm.slotEnd)}</div>
-            <ul className="mt-2 space-y-1">
-              {nm.movableBlockers.map((b) => (
-                <li key={b.eventId} className="flex flex-wrap items-center gap-2 text-xs">
-                  <Badge variant="secondary">{b.memberName}</Badge>
-                  <span className="text-muted-foreground">צריך להזיז את</span>
-                  <span className="font-medium">
-                    {b.summary || 'אירוע ללא שם'}
-                  </span>
-                  <span className="text-muted-foreground" dir="ltr">
-                    ({formatSlot(b.start, b.end)})
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

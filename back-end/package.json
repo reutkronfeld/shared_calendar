@@ -23,6 +23,7 @@
     "fastify-plugin": "^5.0.1",
     "googleapis": "^144.0.0",
     "mongoose": "^8.8.0",
+    "resend": "^6.12.3",
     "unique-names-generator": "^4.7.1",
     "zod": "^3.23.8"
   },
